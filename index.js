@@ -1,106 +1,113 @@
 const TelegramBot = require("node-telegram-bot-api");
-const fs = require("fs-extra");
+const fs = require("fs");
 const path = require("path");
 
+// 🔐 Environment Variables
 const token = process.env.BOT_TOKEN;
-const ADMIN_ID = 1064327506;
+const ADMIN_ID = Number(process.env.ADMIN_ID);
+
+if (!token) {
+  console.error("BOT_TOKEN is missing!");
+  process.exit(1);
+}
 
 const bot = new TelegramBot(token, { polling: true });
 
-const ticketsFile = "./tickets.json";
-const ticketsFolder = "./tickets";
+console.log("Bot is running...");
 
-let userStates = {};
+// 📂 Ensure tickets folder exists
+const ticketsFolder = path.join(__dirname, "tickets");
+if (!fs.existsSync(ticketsFolder)) {
+  fs.mkdirSync(ticketsFolder);
+}
 
-// Load tickets
+// 📄 Ensure tickets.json exists
+const ticketsFile = path.join(__dirname, "tickets.json");
+if (!fs.existsSync(ticketsFile)) {
+  fs.writeFileSync(ticketsFile, JSON.stringify([]));
+}
+
+// 📖 Load tickets
 function loadTickets() {
-  return fs.readJsonSync(ticketsFile);
+  return JSON.parse(fs.readFileSync(ticketsFile));
 }
 
-// Save tickets
+// 💾 Save tickets
 function saveTickets(data) {
-  fs.writeJsonSync(ticketsFile, data, { spaces: 2 });
+  fs.writeFileSync(ticketsFile, JSON.stringify(data, null, 2));
 }
 
-// Generate keyboard
-function generateKeyboard() {
-  const tickets = loadTickets();
-  return Object.keys(tickets).map(name => [
-    { text: name, callback_data: name }
-  ]);
-}
-
-// START COMMAND
+// 👋 /start command
 bot.onText(/\/start/, (msg) => {
-  bot.sendMessage(
-    msg.chat.id,
-    "Hello 👋\nPlease select your travel date:",
-    {
-      reply_markup: {
-        inline_keyboard: generateKeyboard()
-      }
-    }
-  );
-});
+  const chatId = msg.chat.id;
+  const tickets = loadTickets();
 
-// ADMIN ADD COMMAND
-bot.onText(/\/add/, (msg) => {
-  if (msg.from.id.toString() !== ADMIN_ID) {
-    return bot.sendMessage(msg.chat.id, "❌ Not authorized.");
+  if (tickets.length === 0) {
+    return bot.sendMessage(chatId, "No tickets available right now.");
   }
 
-  userStates[msg.from.id] = { step: "waiting_pdf" };
-  bot.sendMessage(msg.chat.id, "📎 Send the PDF file.");
+  const keyboard = tickets.map((ticket, index) => {
+    return [{ text: ticket.name, callback_data: `ticket_${index}` }];
+  });
+
+  bot.sendMessage(chatId, "Hello 👋\nPlease select your travel date:", {
+    reply_markup: {
+      inline_keyboard: keyboard,
+    },
+  });
 });
 
-// HANDLE DOCUMENT
-bot.on("document", async (msg) => {
-  if (msg.from.id.toString() !== ADMIN_ID) return;
+// 📎 Handle PDF upload (ADMIN ONLY)
+bot.on("document", (msg) => {
+  const chatId = msg.chat.id;
 
-  if (userStates[msg.from.id]?.step === "waiting_pdf") {
-    const fileId = msg.document.file_id;
-    const fileName = msg.document.file_name;
-    const filePath = await bot.getFileLink(fileId);
-
-    const downloadPath = path.join(ticketsFolder, fileName);
-
-    await fs.ensureDir(ticketsFolder);
-    await fs.writeFile(downloadPath, await (await fetch(filePath)).buffer());
-
-    userStates[msg.from.id] = {
-      step: "waiting_name",
-      fileName: fileName
-    };
-
-    bot.sendMessage(msg.chat.id, "📝 Enter ticket name (example: 30 April 2026)");
+  if (chatId !== ADMIN_ID) {
+    return bot.sendMessage(chatId, "You are not authorized.");
   }
-});
 
-// HANDLE TICKET NAME
-bot.on("message", (msg) => {
-  if (msg.from.id.toString() !== ADMIN_ID) return;
+  const file = msg.document;
 
-  if (userStates[msg.from.id]?.step === "waiting_name") {
+  if (file.mime_type !== "application/pdf") {
+    return bot.sendMessage(chatId, "Please upload a PDF file.");
+  }
+
+  const fileId = file.file_id;
+  const fileName = file.file_name;
+  const filePath = path.join(ticketsFolder, fileName);
+
+  bot.downloadFile(fileId, ticketsFolder).then((downloadedPath) => {
     const tickets = loadTickets();
-    tickets[msg.text] = userStates[msg.from.id].fileName;
+
+    tickets.push({
+      name: fileName.replace(".pdf", ""),
+      file: fileName,
+    });
+
     saveTickets(tickets);
 
-    userStates[msg.from.id] = null;
-
-    bot.sendMessage(msg.chat.id, "✅ Ticket added successfully!");
-  }
+    bot.sendMessage(chatId, `Ticket "${fileName}" uploaded successfully ✅`);
+  });
 });
 
-// HANDLE BUTTON CLICK
+// 🎯 Handle button click
 bot.on("callback_query", (query) => {
+  const chatId = query.message.chat.id;
   const tickets = loadTickets();
-  const fileName = tickets[query.data];
 
-  if (fileName) {
-    bot.sendDocument(query.message.chat.id, path.join(ticketsFolder, fileName));
+  const index = query.data.split("_")[1];
+
+  if (!tickets[index]) {
+    return bot.answerCallbackQuery(query.id, {
+      text: "Ticket not found",
+    });
   }
 
+  const filePath = path.join(ticketsFolder, tickets[index].file);
+
+  if (!fs.existsSync(filePath)) {
+    return bot.sendMessage(chatId, "File missing on server.");
+  }
+
+  bot.sendDocument(chatId, filePath);
   bot.answerCallbackQuery(query.id);
 });
-
-console.log("Bot running...");
