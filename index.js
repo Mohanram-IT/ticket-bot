@@ -1,53 +1,88 @@
-const TelegramBot = require("node-telegram-bot-api");
-const fs = require("fs");
+const TelegramBot = require('node-telegram-bot-api');
+const fs = require('fs');
+const path = require('path');
 
+// Bot token
 const token = process.env.BOT_TOKEN;
-const ADMIN_ID = 1064327506; // 🔴 CHANGE TO YOUR TELEGRAM USER ID
+const ADMIN_ID = 1064327506; // Replace with your Telegram ID
 
+// Create a new bot instance
 const bot = new TelegramBot(token, { polling: true });
 
 console.log("Bot is running...");
 
-// Load tickets
+// ---------------- Load Tickets ----------------
+
+const ticketsFolder = path.join(__dirname, "tickets");
+
+// Ensure tickets folder exists
+if (!fs.existsSync(ticketsFolder)) {
+  fs.mkdirSync(ticketsFolder);
+}
+
+// Load tickets from JSON file
 function loadTickets() {
-  if (!fs.existsSync("tickets.json")) {
-    fs.writeFileSync("tickets.json", JSON.stringify([]));
+  const ticketsFile = path.join(__dirname, 'tickets.json');
+
+  // If tickets.json doesn't exist, create it with empty array
+  if (!fs.existsSync(ticketsFile)) {
+    fs.writeFileSync(ticketsFile, JSON.stringify([]));
   }
-  return JSON.parse(fs.readFileSync("tickets.json"));
+
+  return JSON.parse(fs.readFileSync(ticketsFile));
 }
 
-// Save tickets
-function saveTickets(tickets) {
-  fs.writeFileSync("tickets.json", JSON.stringify(tickets, null, 2));
-}
+// ---------------- /start Command ----------------
 
-// /start command
 bot.onText(/\/start/, (msg) => {
   const chatId = msg.chat.id;
-  const tickets = loadTickets();
 
-  if (tickets.length === 0) {
+  const tickets = loadTickets();
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const validTickets = tickets.filter(ticket => {
+    const ticketDate = new Date(ticket.date);
+    return ticketDate >= today;
+  });
+
+  if (validTickets.length === 0) {
     return bot.sendMessage(chatId, "No tickets available right now.");
   }
 
-  const buttons = tickets.map(ticket => [
-    { text: ticket.date, callback_data: ticket.date }
+  const buttons = validTickets
+    .sort((a, b) => new Date(a.date) - new Date(b.date))
+    .map(ticket => [
+      { text: ticket.date, callback_data: ticket.date }
+    ]);
+
+  // Add Download All button
+  buttons.push([
+    { text: "📥 Download All Tickets", callback_data: "download_all" }
   ]);
 
   bot.sendMessage(chatId, "Hello 👋\nPlease select your travel date:", {
-    reply_markup: {
-      inline_keyboard: buttons
-    }
+    reply_markup: { inline_keyboard: buttons }
   });
 });
 
-// Handle button click
-bot.on("callback_query", (query) => {
-  const chatId = query.message.chat.id;
-  const selectedDate = query.data;
+// ---------------- Handle Callback Query ----------------
 
-  const tickets = loadTickets();
-  const ticket = tickets.find(t => t.date === selectedDate);
+bot.on('callback_query', (query) => {
+  const chatId = query.message.chat.id;
+  const data = query.data;
+
+  if (data === "download_all") {
+    const tickets = loadTickets();
+
+    tickets.forEach(ticket => {
+      bot.sendDocument(chatId, ticket.file_id);
+    });
+
+    return bot.answerCallbackQuery(query.id);
+  }
+
+  const ticket = loadTickets().find(t => t.date === data);
 
   if (!ticket) {
     return bot.sendMessage(chatId, "Ticket not found.");
@@ -57,8 +92,9 @@ bot.on("callback_query", (query) => {
   bot.answerCallbackQuery(query.id);
 });
 
-// Admin upload
-bot.on("document", (msg) => {
+// ---------------- Admin File Upload ----------------
+
+bot.on('document', (msg) => {
   const chatId = msg.chat.id;
 
   if (chatId !== ADMIN_ID) {
@@ -73,22 +109,37 @@ bot.on("document", (msg) => {
   }
 
   const date = fileName.replace(".pdf", "");
-  const fileId = file.file_id;
 
   const tickets = loadTickets();
 
-  // Check if already exists
-  const exists = tickets.find(t => t.date === date);
-  if (exists) {
+  const existing = tickets.find(t => t.date === date);
+  if (existing) {
     return bot.sendMessage(chatId, "Ticket for this date already exists.");
   }
 
+  // Save ticket to JSON file
   tickets.push({
     date: date,
-    file_id: fileId
+    file_id: file.file_id
   });
 
-  saveTickets(tickets);
+  const ticketsFile = path.join(__dirname, 'tickets.json');
+  fs.writeFileSync(ticketsFile, JSON.stringify(tickets, null, 2));
 
   bot.sendMessage(chatId, `Ticket "${fileName}" uploaded successfully ✅`);
 });
+
+// ---------------- Reply to Any User Message ----------------
+
+bot.on("message", (msg) => {
+  const chatId = msg.chat.id;
+
+  if (msg.text && !msg.text.startsWith("/") && !msg.document) {
+    bot.sendMessage(
+      chatId,
+      "Hello 👋\nWelcome to Ticket Counter Bot.\n\nType /start to view available tickets."
+    );
+  }
+});
+
+console.log("Bot is running...");
