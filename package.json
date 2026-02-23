@@ -1,0 +1,13 @@
+{
+  "name": "ticket-bot",
+  "version": "1.0.0",
+  "description": "Telegram Ticket Bot with Admin Panel",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "node-telegram-bot-api": "^0.61.0",
+    "fs-extra": "^11.1.1"
+  }
+}
