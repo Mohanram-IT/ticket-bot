@@ -47,7 +47,7 @@ bot.onText(/\/start/, (msg) => {
   });
 
   if (validTickets.length === 0) {
-    return bot.sendMessage(chatId, "No tickets available right now.");
+    return bot.sendMessage(chatId, "No upcoming train tickets available right now.");
   }
 
   const buttons = validTickets
@@ -58,7 +58,7 @@ bot.onText(/\/start/, (msg) => {
 
   // Add Download All button
   buttons.push([
-    { text: "📥 Download All Tickets", callback_data: "download_all" }
+    { text: "📥 Download All Train Tickets", callback_data: "download_all" }
   ]);
 
   bot.sendMessage(chatId, "Hello 👋\nPlease select your travel date:", {
@@ -98,14 +98,14 @@ bot.on('document', (msg) => {
   const chatId = msg.chat.id;
 
   if (chatId !== ADMIN_ID) {
-    return bot.sendMessage(chatId, "You are not authorized to upload tickets.");
+    return bot.sendMessage(chatId, "You are not authorized to upload train tickets.");
   }
 
   const file = msg.document;
   const fileName = file.file_name;
 
   if (!fileName.endsWith(".pdf")) {
-    return bot.sendMessage(chatId, "Please upload a PDF file.");
+    return bot.sendMessage(chatId, "Please upload a PDF train ticket.");
   }
 
   const date = fileName.replace(".pdf", "");
@@ -126,7 +126,7 @@ bot.on('document', (msg) => {
   const ticketsFile = path.join(__dirname, 'tickets.json');
   fs.writeFileSync(ticketsFile, JSON.stringify(tickets, null, 2));
 
-  bot.sendMessage(chatId, `Ticket "${fileName}" uploaded successfully ✅`);
+  bot.sendMessage(chatId, `Train ticket for "${fileName}" uploaded successfully ✅`);
 });
 
 // ---------------- Reply to Any User Message ----------------
@@ -149,11 +149,11 @@ bot.on("message", (msg) => {
   // If the message is random (not a command)
   if (msg.text && !msg.text.startsWith("/") && !msg.document) {
     const randomMessages = [
-      `${greeting} I'm your personal Ticket Bot! 🎟️ What movie are you in the mood for today? 🍿`,
-      `${greeting} Ready to book your next adventure? 😎`,
-      `${greeting} Type /start and let's get your tickets ready! 🎥🍿`,
-      "Need a movie ticket? 🎬 I'm your guy! Let me know what you're looking for! 🎟️",
-      "Hello! 🌟 Ready for a movie marathon? 🎬 Choose your movie by typing the title! 🍿",
+      `${greeting} I'm your personal Train Ticket Bot! 🎟️ What date are you traveling? 🚆`,
+      `${greeting} Need a train ticket? 🚅 Just type the date and I'll send it! 🎟️`,
+      `${greeting} Type /start to check your upcoming train tickets! 🚉`,
+      "Need your train ticket? 🚆 Just let me know and I'll send it to you! 🎫",
+      "Hey! 🌟 Ready to get your train tickets? 🎟️ Select the date and I’ll send it right away! 🚆",
     ];
 
     // Randomly pick a greeting message
