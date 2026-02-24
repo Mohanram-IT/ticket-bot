@@ -2,7 +2,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const fs = require('fs');
 const path = require('path');
 
-// Bot token
+// Bot token and admin ID
 const token = process.env.BOT_TOKEN;
 const ADMIN_ID = 1064327506; // Replace with your Telegram ID
 
@@ -133,12 +133,34 @@ bot.on('document', (msg) => {
 
 bot.on("message", (msg) => {
   const chatId = msg.chat.id;
+  const userFirstName = msg.from.first_name; // Get user first name
+  const currentHour = new Date().getHours();
 
+  // Time-based greeting
+  let greeting = "Hello 👋";
+  if (currentHour < 12) {
+    greeting = `Good Morning, ${userFirstName}! 🌅`;
+  } else if (currentHour < 18) {
+    greeting = `Good Afternoon, ${userFirstName}! 🌞`;
+  } else {
+    greeting = `Good Evening, ${userFirstName}! 🌙`;
+  }
+
+  // If the message is random (not a command)
   if (msg.text && !msg.text.startsWith("/") && !msg.document) {
-    bot.sendMessage(
-      chatId,
-      "Hello 👋\nWelcome to Ticket Counter Bot.\n\nType /start to view available tickets."
-    );
+    const randomMessages = [
+      `${greeting} I'm your personal Ticket Bot! 🎟️ What movie are you in the mood for today? 🍿`,
+      `${greeting} Ready to book your next adventure? 😎`,
+      `${greeting} Type /start and let's get your tickets ready! 🎥🍿`,
+      "Need a movie ticket? 🎬 I'm your guy! Let me know what you're looking for! 🎟️",
+      "Hello! 🌟 Ready for a movie marathon? 🎬 Choose your movie by typing the title! 🍿",
+    ];
+
+    // Randomly pick a greeting message
+    const message = randomMessages[Math.floor(Math.random() * randomMessages.length)];
+
+    // Send the chosen message
+    bot.sendMessage(chatId, message);
   }
 });
 
